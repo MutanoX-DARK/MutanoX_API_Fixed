@@ -254,10 +254,10 @@ function initCharts() {
         data: {
             labels: [],
             datasets: [{
-                label: 'Total Requests',
+                label: 'Requests per Interval',
                 data: [],
-                borderColor: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
                 fill: true,
                 tension: 0.4,
                 pointRadius: 3,
@@ -440,11 +440,16 @@ function updateStats(data) {
 }
 
 // Update timeline chart
+let lastTotalRequests = 0;
 function updateTimeline(totalRequests) {
     const now = new Date();
     const timeLabel = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    requestHistory.push({ time: timeLabel, requests: totalRequests });
+    // Calcular a diferença (requisições desde a última atualização)
+    const diff = lastTotalRequests === 0 ? 0 : totalRequests - lastTotalRequests;
+    lastTotalRequests = totalRequests;
+
+    requestHistory.push({ time: timeLabel, requests: diff });
     
     if (requestHistory.length > 20) {
         requestHistory.shift();
@@ -503,7 +508,7 @@ function updateKeys(keys) {
                 <div style="margin-bottom: 12px;">
                     <div class="cyber-card" style="padding: 12px; background: rgba(15, 23, 42, 0.3); display: flex; justify-content: space-between; align-items: center;">
                         <code class="text-success" style="font-size: 12px;" id="key-${key.substring(0, 8)}">••••••••••••••••</code>
-                        <button onclick="toggleKeyVisibility('${key}', 'key-${key.substring(0, 8)}')" class="copy-btn" style="padding: 4px 8px; font-size: 10px;">
+                        <button onclick="window.toggleKeyVisibility('${key}', 'key-${key.substring(0, 8)}')" class="copy-btn" style="padding: 4px 8px; font-size: 10px;">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
@@ -530,11 +535,21 @@ function updateKeys(keys) {
 
 // Update endpoints
 function updateEndpoints(endpointHits) {
-    console.log('[updateEndpoints] Updating endpoints...');
+    console.log('[updateEndpoints] Updating endpoints...', endpointHits);
     
     const container = document.getElementById('endpoints-management');
     const list = document.getElementById('endpoint-list');
     const endpoints = Object.keys(endpointConfigs);
+
+    // Atualizar Gráfico de Pizza
+    if (endpointChart) {
+        const labels = Object.keys(endpointHits).map(key => endpointConfigs[key] ? endpointConfigs[key].name : key);
+        const data = Object.values(endpointHits);
+        
+        endpointChart.data.labels = labels;
+        endpointChart.data.datasets[0].data = data;
+        endpointChart.update();
+    }
 
     if (!container) {
         console.warn('[updateEndpoints] endpoints-management element not found!');
@@ -840,13 +855,28 @@ function updateLogs(logs) {
     }
 
     const logHtml = logs.map(log => {
-        const typeClass = `log-${log.type.toLowerCase()}`;
+        const type = log.type.toUpperCase();
+        let icon = 'fa-info-circle';
+        let color = '#3b82f6';
+        
+        if (type === 'SUCCESS') { icon = 'fa-check-circle'; color = '#10b981'; }
+        else if (type === 'ERROR') { icon = 'fa-exclamation-circle'; color = '#ef4444'; }
+        else if (type === 'WARN') { icon = 'fa-exclamation-triangle'; color = '#f59e0b'; }
+        else if (type === 'AUTH') { icon = 'fa-lock'; color = '#a855f7'; }
+        else if (type === 'ADMIN') { icon = 'fa-crown'; color = '#fbbf24'; }
+        else if (type === 'REQUEST') { icon = 'fa-globe'; color = '#3b82f6'; }
+
         return `
-            <div class="log-entry">
-                <span class="text-muted">[${log.timestamp}]</span>
-                <span class="${typeClass}" style="font-weight: bold;">[${log.type}]</span>
-                <span>${log.message}</span>
-                ${log.details ? `<div style="margin-left: 20px; font-size: 10px; color: #64748b;">└─> ${log.details}</div>` : ''}
+            <div class="log-entry" style="border-left: 3px solid ${color}; margin-bottom: 4px; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 0 8px 8px 0;">
+                <div class="flex justify-between items-start">
+                    <div class="flex items-center gap-2">
+                        <i class="fas ${icon}" style="color: ${color}; font-size: 12px;"></i>
+                        <span style="color: ${color}; font-weight: 700; font-size: 11px; letter-spacing: 0.5px;">${type}</span>
+                        <span style="color: #f8fafc; font-size: 12px;">${log.message}</span>
+                    </div>
+                    <span style="color: #64748b; font-size: 10px; font-family: 'JetBrains Mono', monospace;">${log.timestamp.split(', ')[1] || log.timestamp}</span>
+                </div>
+                ${log.details ? `<div style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;">${log.details}</div>` : ''}
             </div>
         `;
     }).join('');
