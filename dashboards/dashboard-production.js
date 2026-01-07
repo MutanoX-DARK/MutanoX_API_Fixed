@@ -1,0 +1,785 @@
+
+// CONFIGURATION
+const API_BASE = '';
+let adminKey = localStorage.getItem('mutanox_admin_key') || '';
+let refreshInterval = null;
+let refreshRate = 2000;
+let lastData = null;
+let chartAnimation = true;
+let endpointChart = null;
+let timelineChart = null;
+let logFilter = 'all';
+let currentTab = 'dashboard';
+let currentChartType = 'doughnut';
+let requestHistory = [];
+
+// Endpoint configurations
+const endpointConfigs = {
+    'cpf': {
+        name: 'Consultar CPF',
+        description: 'Consulta completa de CPF com dados básicos, econômicos e endereços',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=cpf&cpf=XXX',
+        icon: 'fa-id-card',
+        color: '#10b981'
+    },
+    'nome': {
+        name: 'Consultar Nome',
+        description: 'Busca por nome completo com múltiplos resultados',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=nome&q=XXX',
+        icon: 'fa-user',
+        color: '#6366f1'
+    },
+    'numero': {
+        name: 'Consultar Telefone',
+        description: 'Consulta de telefone com dados da pessoa associada',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=numero&q=XXX',
+        icon: 'fa-phone',
+        color: '#f59e0b'
+    }
+};
+
+// Helper function to safely get element
+function safeGetElement(id) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn(`[safeGetElement] Element with id "${id}" not found!`);
+    }
+    return el;
+}
+
+// Helper function to safely set innerHTML
+function safeSetInnerHTML(id, html) {
+    const el = safeGetElement(id);
+    if (!el) return;
+    
+    try {
+        el.innerHTML = html;
+    } catch (error) {
+        console.error(`[safeSetInnerHTML] Error setting innerHTML for id "${id}":`, error);
+    }
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[DOMContentLoaded] DOM loaded');
+    
+    if (adminKey) {
+        console.log('[DOMContentLoaded] Admin key found:', adminKey);
+        showDashboard();
+    } else {
+        console.log('[DOMContentLoaded] No admin key, showing login');
+    }
+});
+
+// Login function
+async function login() {
+    const keyInput = document.getElementById('admin-key-input') || document.querySelector('input[type="password"]');
+    if (!keyInput) {
+        console.error('[login] Login input not found!');
+        showToast('error', 'Elemento de login não encontrado');
+        return;
+    }
+    
+    const key = keyInput.value;
+    console.log('[login] Attempting login with key:', key);
+    
+    if (!key) {
+        showToast('error', 'Por favor, insira uma API key');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/admin/validate?apikey=${key}`);
+        console.log('[login] Response status:', response.status);
+        
+        if (response.ok) {
+            adminKey = key;
+            localStorage.setItem('mutanox_admin_key', key);
+            showToast('success', 'Authentication successful');
+            showDashboard();
+        } else {
+            const errorEl = safeGetElement('login-error');
+            if (errorEl) {
+                errorEl.classList.remove('hidden');
+                setTimeout(() => errorEl.classList.add('hidden'), 3000);
+            }
+        }
+    } catch (error) {
+        console.error('[login] Error:', error);
+        showToast('error', 'Connection error: ' + error.message);
+    }
+}
+
+function logout() {
+    console.log('[logout] Logging out...');
+    localStorage.removeItem('mutanox_admin_key');
+    adminKey = '';
+    clearInterval(refreshInterval);
+    location.reload();
+}
+
+function showDashboard() {
+    console.log('[showDashboard] Showing dashboard...');
+    
+    const loginOverlay = document.getElementById('login-overlay');
+    const dashboardContent = document.getElementById('dashboard-content');
+    
+    if (loginOverlay) {
+        loginOverlay.style.display = 'none';
+        loginOverlay.classList.add('hidden');
+    }
+    if (dashboardContent) {
+        dashboardContent.style.display = 'block';
+        dashboardContent.classList.remove('hidden');
+    }
+    
+    initCharts();
+    startAutoRefresh();
+}
+
+// Tab switching
+function switchTab(tab) {
+    console.log('[switchTab] Switching to tab:', tab);
+    currentTab = tab;
+    
+    // Hide all content
+    ['dashboard', 'keys', 'endpoints', 'logs'].forEach(t => {
+        const contentEl = safeGetElement(`content-${t}`);
+        if (contentEl) contentEl.classList.add('hidden');
+        
+        const btnEl = safeGetElement(`tab-${t}`);
+        if (btnEl) btnEl.classList.remove('active');
+    });
+    
+    // Show selected content
+    const activeContent = safeGetElement(`content-${tab}`);
+    if (activeContent) activeContent.classList.remove('hidden');
+    
+    const activeBtn = safeGetElement(`tab-${tab}`);
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
+// Charts initialization
+function initCharts() {
+    console.log('[initCharts] Initializing charts...');
+    destroyCharts();
+    
+    const endpointCtx = safeGetElement('endpointChart');
+    if (!endpointCtx) {
+        console.error('[initCharts] endpointChart canvas not found!');
+        return;
+    }
+    
+    console.log('[initCharts] endpointChart canvas found, creating chart...');
+    
+    endpointChart = new Chart(endpointCtx, {
+        type: currentChartType,
+        data: {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: [
+                    '#10b981', '#6366f1', '#f59e0b', '#ef4444',
+                    '#8b5cf6', '#06b6d4', '#f97316'
+                ],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            cutout: '70%'
+        }
+    });
+
+    console.log('[initCharts] endpointChart created successfully');
+
+    // Timeline Chart
+    const timelineCtx = safeGetElement('timelineChart');
+    if (!timelineCtx) {
+        console.error('[initCharts] timelineChart canvas not found!');
+        return;
+    }
+    
+    console.log('[initCharts] timelineChart canvas found, creating chart...');
+    
+    timelineChart = new Chart(timelineCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Total Requests',
+                data: [],
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true },
+                x: { display: false }
+            }
+        }
+    });
+    
+    console.log('[initCharts] timelineChart created successfully');
+}
+
+// Destroy all charts
+function destroyCharts() {
+    console.log('[destroyCharts] Destroying existing charts...');
+    
+    if (endpointChart) {
+        endpointChart.destroy();
+        endpointChart = null;
+        console.log('[destroyCharts] endpointChart destroyed');
+    }
+    
+    if (timelineChart) {
+        timelineChart.destroy();
+        timelineChart = null;
+        console.log('[destroyCharts] timelineChart destroyed');
+    }
+}
+
+// Auto refresh
+function startAutoRefresh() {
+    console.log('[startAutoRefresh] Starting auto refresh...');
+    refreshData();
+    refreshInterval = setInterval(refreshData, refreshRate);
+}
+
+// Toggle auto refresh
+const autoRefreshToggle = safeGetElement('auto-refresh-toggle');
+if (autoRefreshToggle) {
+    autoRefreshToggle.addEventListener('change', function() {
+        if (this.checked) {
+            refreshInterval = setInterval(refreshData, refreshRate);
+        } else {
+            clearInterval(refreshInterval);
+        }
+    });
+}
+
+// Force refresh
+function forceRefresh() {
+    const refreshIcon = safeGetElement('refresh-icon');
+    if (refreshIcon) refreshIcon.classList.add('loading-spinner');
+    
+    refreshData().finally(() => {
+        if (refreshIcon) refreshIcon.classList.remove('loading-spinner');
+    });
+}
+
+// Main refresh function
+async function refreshData() {
+    console.log('[refreshData] Starting refresh...');
+    
+    try {
+        const response = await fetch(`/api/admin/stats-readonly?apikey=${adminKey}`);
+        console.log('[refreshData] Fetch response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch stats');
+        }
+
+        const data = await response.json();
+        console.log('[refreshData] Response data:', data);
+        
+        if (!data.success) {
+            throw new Error('Invalid response');
+        }
+
+        // Check if data changed
+        const newData = JSON.stringify(data);
+        if (lastData === newData) {
+            console.log('[refreshData] Data unchanged, skipping update');
+            return;
+        }
+        lastData = newData;
+        
+        console.log('[refreshData] Data changed, updating UI...');
+        updateStats(data);
+        
+        if (currentTab === 'dashboard') {
+            updateKeys(data.keys);
+            updateEndpoints(data.endpointHits);
+        }
+        
+        console.log('[refreshData] Refresh completed successfully');
+
+    } catch (error) {
+        console.error('[refreshData] Error:', error);
+        showToast('error', 'Refresh error: ' + error.message);
+    }
+}
+
+// Update stats
+function updateStats(data) {
+    console.log('[updateStats] Updating stats...');
+    
+    const currentTotal = data.totalRequests || 0;
+    
+    // Calculate rate
+    const uptime = data.uptime || 0;
+    const rate = uptime > 0 ? (currentTotal / (uptime / 1000)).toFixed(2) : '0';
+    
+    const statTotal = safeGetElement('stat-total');
+    if (statTotal) {
+        statTotal.textContent = currentTotal.toLocaleString();
+    } else {
+        console.error('[updateStats] stat-total element not found!');
+    }
+    
+    const statRate = safeGetElement('stat-rate');
+    if (statRate) {
+        statRate.textContent = rate;
+    }
+
+    const activeKeys = Object.values(data.keys).filter(k => k.active !== false).length;
+    const statKeys = safeGetElement('stat-keys');
+    if (statKeys) {
+        statKeys.textContent = activeKeys;
+    }
+    
+    const statTotalKeys = safeGetElement('stat-total-keys');
+    if (statTotalKeys) {
+        statTotalKeys.textContent = Object.keys(data.keys).length;
+    }
+
+    const totalHits = Object.values(data.endpointHits).reduce((sum, val) => sum + val, 0);
+    const statEndpoints = safeGetElement('stat-endpoints');
+    if (statEndpoints) {
+        statEndpoints.textContent = totalHits.toLocaleString();
+    }
+    
+    const statTypes = safeGetElement('stat-types');
+    if (statTypes) {
+        statTypes.textContent = Object.keys(data.endpointHits).length;
+    }
+
+    // Update uptime - FIX PARA NaN
+    const statUptime = safeGetElement('stat-uptime');
+    if (statUptime) {
+        if (data.startTime && !isNaN(data.startTime)) {
+            const uptimeSeconds = Math.floor((Date.now() - data.startTime) / 1000);
+            const hours = Math.floor(uptimeSeconds / 3600);
+            const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+            const seconds = uptimeSeconds % 60;
+            const formatted = `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+            
+            statUptime.textContent = formatted;
+            console.log('[updateStats] Uptime updated to:', formatted);
+        } else {
+            statUptime.textContent = '0s';
+            console.log('[updateStats] Uptime not available, setting to 0s');
+        }
+    }
+
+    // Update timeline
+    updateTimeline(currentTotal);
+}
+
+// Update timeline chart
+function updateTimeline(totalRequests) {
+    const now = new Date();
+    const timeLabel = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    requestHistory.push({ time: timeLabel, requests: totalRequests });
+    
+    if (requestHistory.length > 20) {
+        requestHistory.shift();
+    }
+
+    if (timelineChart) {
+        timelineChart.data.labels = requestHistory.map(h => h.time);
+        timelineChart.data.datasets[0].data = requestHistory.map(h => h.requests);
+        timelineChart.update('none');
+        console.log('[updateTimeline] Timeline updated with', requestHistory.length, 'points');
+    }
+}
+
+// Update keys
+function updateKeys(keys) {
+    console.log('[updateKeys] Updating keys...');
+    
+    const container = safeGetElement('keys-list');
+    if (!container) {
+        console.error('[updateKeys] keys-list element not found!');
+        return;
+    }
+    
+    const keysArray = Object.entries(keys);
+
+    if (keysArray.length === 0) {
+        safeSetInnerHTML('keys-list', `
+            <div class="flex items-center justify-center col-span-2" style="padding: 48px;">
+                <i class="fas fa-key" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
+                <p class="text-muted" style="font-size: 16px; margin: 0;">Nenhuma API key encontrada</p>
+            </div>
+        `);
+        return;
+    }
+
+    container.innerHTML = keysArray.map(([key, info]) => {
+        const isActive = info.active !== false;
+        
+        return `
+            <div class="cyber-card" style="padding: 20px; ${!isActive ? 'opacity: 0.5' : ''}">
+                <div class="flex justify-between items-start" style="margin-bottom: 12px;">
+                    <div class="flex items-center gap-3">
+                        <div style="width: 40px; height: 40px; background: ${info.role === 'admin' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; border-radius: 12px;">
+                            <i class="fas ${info.role === 'admin' ? 'fa-shield-alt' : 'fa-key'}" style="font-size: 20px; color: ${info.role === 'admin' ? '#ef4444' : '#10b981'}; line-height: 40px;"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold" style="font-size: 16px; margin: 0;">${info.owner}</p>
+                            <div class="flex items-center gap-2" style="margin-top: 2px;">
+                                <span class="badge badge-${info.role}">${info.role}</span>
+                                <span class="badge badge-active">ATIVO</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <div class="cyber-card" style="padding: 12px; background: rgba(15, 23, 42, 0.3); display: flex; justify-content: space-between; align-items: center;">
+                        <code class="text-success" style="font-size: 12px;" id="key-${key.substring(0, 8)}">••••••••••••••••</code>
+                        <button onclick="toggleKeyVisibility('${key}', 'key-${key.substring(0, 8)}')" class="copy-btn" style="padding: 4px 8px; font-size: 10px;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
+                    <div>
+                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Usage</p>
+                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 18px; margin: 0;">${info.usageCount || 0}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Last Used</p>
+                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">${info.lastUsed ? new Date(info.lastUsed).toLocaleString('pt-BR') : 'Never'}</p>
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Created</p>
+                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">${new Date(info.createdAt).toLocaleString('pt-BR')}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update endpoints
+function updateEndpoints(endpointHits) {
+    console.log('[updateEndpoints] Updating endpoints...');
+    
+    const container = safeGetElement('endpoints-management');
+    const list = safeGetElement('endpoint-list');
+    const endpoints = Object.keys(endpointConfigs);
+
+    if (endpoints.length === 0 || !container) {
+        console.error('[updateEndpoints] endpoints-management element not found!');
+        return;
+    }
+
+    if (Object.keys(endpointHits).length === 0) {
+        safeSetInnerHTML('endpoints-management', `
+            <div class="flex items-center justify-center" style="padding: 48px;">
+                <i class="fas fa-network-wired" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
+                <p class="text-muted" style="font-size: 14px; margin: 0;">Nenhum endpoint utilizado ainda</p>
+            </div>
+        `);
+        if (list) {
+            safeSetInnerHTML('endpoint-list', `
+                <div class="flex items-center justify-center" style="height: 300px;">
+                    <p class="text-muted" style="font-size: 14px;">Aguardando dados de endpoints...</p>
+                </div>
+            `);
+        }
+        return;
+    }
+
+    container.innerHTML = endpoints.map(endpoint => {
+        const config = endpointConfigs[endpoint];
+        const hits = endpointHits[endpoint] || 0;
+        const totalHits = Object.values(endpointHits).reduce((sum, val) => sum + val, 0);
+        const percentage = totalHits > 0 ? ((hits / totalHits) * 100).toFixed(1) : 0;
+        const isActive = hits > 0;
+
+        return `
+            <div class="endpoint-item" style="transition: all 0.2s; border: 1px solid transparent; padding: 16px; border-radius: 16px; ${!isActive ? 'opacity: 0.5; background: rgba(0, 0, 0, 0.2);' : ''}">
+                <div class="flex items-center gap-3" style="margin-bottom: 12px;">
+                    <div style="width: 48px; height: 48px; background: ${config.color}1a; border-radius: 16px;">
+                        <i class="fas ${config.icon}" style="font-size: 20px; color: ${config.color}; line-height: 48px;"></i>
+                    </div>
+                    <div style="flex: 1;">
+                        <p class="font-bold" style="font-size: 16px; margin: 0;">${config.name}</p>
+                        <p class="text-muted" style="font-size: 12px;">${config.description}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold" style="font-family: 'JetBrains Mono', monospace; font-size: 24px; margin: 0; color: #f8fafc;">${hits}</p>
+                        <p class="text-muted" style="font-size: 12px;">requests</p>
+                    </div>
+                </div>
+                <div class="progress-bar" style="margin-bottom: 8px;">
+                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                </div>
+                <div class="flex items-center gap-2 text-xs" style="margin-bottom: 0;">
+                    <span style="color: #64748b;">${percentage}% do total</span>
+                    ${isActive ? '<span style="color: #10b981;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Ativo</span>' : '<span style="color: #64748b;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Inativo</span>'}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (list) {
+        list.innerHTML = Object.entries(endpointHits).map(([endpoint, hits]) => {
+            const config = endpointConfigs[endpoint];
+            const totalHits = Object.values(endpointHits).reduce((sum, val) => sum + val, 0);
+            const percentage = totalHits > 0 ? ((hits / totalHits) * 100).toFixed(1) : 0;
+
+            return `
+                <div class="cyber-card" style="padding: 12px; border-radius: 16px; margin-bottom: 12px; border: 1px solid rgba(51, 65, 85, 0.3);">
+                    <div class="flex items-center gap-2" style="margin-bottom: 8px;">
+                        <div style="width: 32px; height: 32px; background: ${config.color}1a; border-radius: 8px;">
+                            <i class="fas ${config.icon}" style="font-size: 14px; color: ${config.color}; line-height: 32px;"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <p class="font-bold" style="font-size: 14px; margin: 0;">${config.name}</p>
+                            <p class="text-muted" style="font-size: 12px;">${hits} requests (${percentage}%)</p>
+                        </div>
+                        <div class="progress-bar" style="width: 96px; height: 4px;">
+                            <div class="progress-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// Update chart type
+function updateChartType() {
+    const newTypeEl = safeGetElement('chart-type');
+    if (!newTypeEl) {
+        console.error('[updateChartType] chart-type element not found!');
+        return;
+    }
+    
+    const newType = newTypeEl.value;
+    console.log('[updateChartType] Changing chart type from', currentChartType, 'to', newType);
+    
+    if (newType !== currentChartType) {
+        currentChartType = newType;
+        destroyCharts();
+        initCharts();
+        refreshData();
+    }
+}
+
+// Toast notification
+function showToast(type, message) {
+    const container = safeGetElement('toast-container');
+    if (!container) {
+        console.error('[showToast] toast-container element not found!');
+        return;
+    }
+    
+    const colors = {
+        success: 'toast-success',
+        error: 'toast-error',
+        info: 'toast-info',
+        warning: 'toast-warning'
+    };
+
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        info: 'fa-info-circle',
+        warning: 'fa-exclamation-triangle'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${colors[type]}`;
+    toast.innerHTML = `
+        <i class="fas ${icons[type]}" style="font-size: 18px; margin-right: 12px;"></i>
+        <span style="font-weight: 600;">${message}</span>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideIn 0.3s ease-out reverse';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Modal functions
+function openCreateModal() {
+    const modal = safeGetElement('create-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeCreateModal() {
+    const modal = safeGetElement('create-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    
+    const newOwner = safeGetElement('new-owner');
+    const newDescription = safeGetElement('new-description');
+    if (newOwner) newOwner.value = '';
+    if (newDescription) newDescription.value = '';
+}
+
+// Create key function
+async function createKey() {
+    const newOwner = safeGetElement('new-owner');
+    const newRole = safeGetElement('new-role');
+    const newExpiration = safeGetElement('new-expiration');
+    const newDescription = safeGetElement('new-description');
+    
+    if (!newOwner) {
+        showToast('error', 'Please enter an owner name');
+        return;
+    }
+
+    const owner = newOwner.value;
+    const role = newRole ? newRole.value : 'user';
+    const expiration = newExpiration ? newExpiration.value : '';
+    const description = newDescription ? newDescription.value : '';
+
+    console.log('[createKey] Creating key for owner:', owner, 'role:', role);
+    
+    try {
+        const response = await fetch(`/api/admin/keys?owner=${encodeURIComponent(owner)}&role=${role}&apikey=${adminKey}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            console.log('[createKey] Key generated successfully:', data.key);
+            showToast('success', `API Key Generated: ${data.key.substring(0, 10)}...`);
+            closeCreateModal();
+            refreshData();
+        } else {
+            console.error('[createKey] Failed to generate key:', data.error);
+            showToast('error', 'Falha ao gerar key: ' + data.error);
+        }
+    } catch (error) {
+        console.error('[createKey] Error:', error);
+        showToast('error', 'Error: ' + error.message);
+    }
+}
+
+// Clear logs
+function clearLogs() {
+    const terminal = safeGetElement('terminal');
+    if (terminal) {
+        terminal.innerHTML = `
+            <div style="text-align: center; padding: 48px;">
+                <i class="fas fa-check-circle text-success" style="font-size: 48px; color: #10b981; margin-bottom: 16px;"></i>
+                <p>Logs limpos com sucesso</p>
+            </div>
+        `;
+    }
+    showToast('success', 'Logs limpos');
+}
+
+// Export stats
+function exportStats() {
+    if (!lastData) {
+        showToast('error', 'No data to export');
+        return;
+    }
+
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        stats: lastData
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mutanox-stats-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('success', 'Statistics exported');
+}
+
+// Export keys
+async function exportAllKeys() {
+    try {
+        const response = await fetch(`/api/admin/keys?apikey=${adminKey}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                totalKeys: Object.keys(data.keys).length,
+                keys: data.keys
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mutanox-keys-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showToast('success', 'Keys exported successfully');
+        }
+    } catch (error) {
+        console.error('[exportAllKeys] Error:', error);
+        showToast('error', 'Error exporting keys: ' + error.message);
+    }
+}
+
+// Enter key on login
+const adminKeyInput = safeGetElement('admin-key-input');
+if (adminKeyInput) {
+    adminKeyInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            login();
+        }
+    });
+}
+
+// Toggle key visibility
+function toggleKeyVisibility(fullKey, elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    
+    if (el.innerText === '••••••••••••••••') {
+        el.innerText = fullKey;
+        setTimeout(() => {
+            el.innerText = '••••••••••••••••';
+        }, 5000);
+    } else {
+        el.innerText = '••••••••••••••••';
+    }
+}

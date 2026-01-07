@@ -1,0 +1,16 @@
+{
+  "name": "mutanox-api",
+  "version": "3.0.0",
+  "description": "API Real de Consulta - @MutanoX (Repositório Original) - Dashboard incluído",
+  "main": "api.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node api.js",
+    "dev": "node --watch api.js",
+    "test": "bun testar-tudo.js"
+  },
+  "keywords": ["api", "consulta", "cpf", "telefone", "nome", "mutanox", "dashboard", "admin"],
+  "author": "@MutanoX",
+  "license": "MIT",
+  "dependencies": {}
+}
