@@ -23,7 +23,11 @@
         .container {
             max-width: 1600px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 10px;
+        }
+        
+        @media (min-width: 768px) {
+            .container { padding: 20px; }
         }
 
         .cyber-card {
@@ -342,14 +346,25 @@
         .gap-3 { gap: 12px; }
         .gap-4 { gap: 16px; }
         .gap-6 { gap: 24px; }
-
-        .grid { display: grid; }
-        .grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
-        .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
-        .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
-        .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
-        .grid-cols-1-2 { grid-template-columns: 1fr 2fr; }
-        .grid-cols-2-3 { grid-template-columns: 2fr 3fr; }
+        .grid { display: grid; gap: 1rem; }
+        .grid-cols-1 { grid-template-columns: 1fr; }
+        
+        @media (min-width: 640px) {
+            .grid-cols-sm-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        
+        @media (min-width: 768px) {
+            .grid-cols-md-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .grid-cols-md-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        
+        @media (min-width: 1024px) {
+            .grid-cols-lg-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .grid-cols-lg-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+        
+        .gap-4 { gap: 1rem; }
+        .gap-6 { gap: 1.5rem; }s: 2fr 3fr; }
 
         .text-4xl { font-size: 36px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
         .text-lg { font-size: 18px; font-weight: 700; }
@@ -541,7 +556,7 @@
 
         <!-- Dashboard Tab Content -->
         <div id="content-dashboard" class="mb-6">
-            <div class="grid grid-cols-1 grid-cols-lg-2 gap-6">
+            <div class="grid grid-cols-1 grid-cols-md-2 gap-6">
                 <!-- Endpoint Statistics -->
                 <div class="cyber-card">
                     <div class="p-5" style="border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center;">
@@ -605,8 +620,7 @@
                     </h3>
                 </div>
                 <div class="p-5">
-                    <div class="grid grid-cols-1 grid-cols-sm-2 grid-cols-lg-4 gap-4">
-                        <button onclick="openCreateModal()" class="cyber-card" style="padding: 20px; text-align: left; cursor: pointer;">
+                 <div class="grid grid-cols-1 grid-cols-sm-2 grid-cols-lg-4 gap-6 mb-6">                       <button onclick="openCreateModal()" class="cyber-card" style="padding: 20px; text-align: left; cursor: pointer;">
                             <div class="flex items-center gap-3">
                                 <div style="width: 48px; height: 48px; background: rgba(16, 185, 129, 0.1); border-radius: 12px;">
                                     <i class="fas fa-plus" style="font-size: 20px; color: #10b981; line-height: 48px;"></i>
@@ -720,7 +734,7 @@
                         <button onclick="clearLogs()" style="padding: 6px 12px; background: rgba(15, 23, 42, 0.5); border: 1px solid #334155; color: #64748b; border-radius: 6px; cursor: pointer;">Clear</button>
                     </div>
                 </div>
-                <div id="terminal" class="terminal" style="height: 500px; overflow-y: auto;">
+                <div id="terminal" class="terminal" style="height: 500px; overflow-y: auto; padding: 10px;">
                     <div style="text-align: center; padding: 48px;">
                         <i class="fas fa-terminal" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
                         <p>Aguardando logs do sistema...</p>

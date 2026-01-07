@@ -41,6 +41,42 @@ const endpointConfigs = {
         params: 'tipo=numero&q=XXX',
         icon: 'fa-phone',
         color: '#f59e0b'
+    },
+    'bypasscf': {
+        name: 'Bypass Cloudflare',
+        description: 'Bypass de proteção Cloudflare Turnstile/WAF',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=bypasscf&url=XXX',
+        icon: 'fa-shield-virus',
+        color: '#ef4444'
+    },
+    'infoff': {
+        name: 'Free Fire Info',
+        description: 'Consulta de informações de conta Free Fire',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=infoff&id=XXX',
+        icon: 'fa-gamepad',
+        color: '#8b5cf6'
+    },
+    'downloader': {
+        name: 'AIO Downloader',
+        description: 'Download de vídeos e mídias de várias redes sociais',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=downloader&url=XXX',
+        icon: 'fa-download',
+        color: '#06b6d4'
+    },
+    'nsfw': {
+        name: 'NSFW Gen',
+        description: 'Geração de imagens NSFW via IA',
+        method: 'GET',
+        path: '/api/consultas',
+        params: 'tipo=nsfw&prompt=XXX',
+        icon: 'fa-image',
+        color: '#f97316'
     }
 };
 
@@ -78,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Login function
-async function login() {
+window.login = async function() {
     const keyInput = document.getElementById('admin-key-input') || document.querySelector('input[type="password"]');
     if (!keyInput) {
         console.error('[login] Login input not found!');
@@ -116,7 +152,7 @@ async function login() {
     }
 }
 
-function logout() {
+window.logout = function() {
     console.log('[logout] Logging out...');
     localStorage.removeItem('mutanox_admin_key');
     adminKey = '';
@@ -144,7 +180,7 @@ function showDashboard() {
 }
 
 // Tab switching
-function switchTab(tab) {
+window.switchTab = function(tab) {
     console.log('[switchTab] Switching to tab:', tab);
     currentTab = tab;
     
@@ -281,7 +317,7 @@ if (autoRefreshToggle) {
 }
 
 // Force refresh
-function forceRefresh() {
+window.forceRefresh = function() {
     const refreshIcon = safeGetElement('refresh-icon');
     if (refreshIcon) refreshIcon.classList.add('loading-spinner');
     
@@ -320,9 +356,13 @@ async function refreshData() {
         console.log('[refreshData] Data changed, updating UI...');
         updateStats(data);
         
-        if (currentTab === 'dashboard') {
-            updateKeys(data.keys);
-            updateEndpoints(data.endpointHits);
+        // Sempre atualizar dados essenciais
+        updateKeys(data.keys);
+        updateEndpoints(data.endpointHits);
+        
+        // Se houver logs na resposta, atualizar (precisamos garantir que a API envie logs)
+        if (data.logs) {
+            updateLogs(data.logs);
         }
         
         console.log('[refreshData] Refresh completed successfully');
@@ -492,13 +532,12 @@ function updateKeys(keys) {
 function updateEndpoints(endpointHits) {
     console.log('[updateEndpoints] Updating endpoints...');
     
-    const container = safeGetElement('endpoints-management');
-    const list = safeGetElement('endpoint-list');
+    const container = document.getElementById('endpoints-management');
+    const list = document.getElementById('endpoint-list');
     const endpoints = Object.keys(endpointConfigs);
 
-    if (endpoints.length === 0 || !container) {
-        console.error('[updateEndpoints] endpoints-management element not found!');
-        return;
+    if (!container) {
+        console.warn('[updateEndpoints] endpoints-management element not found!');
     }
 
     if (Object.keys(endpointHits).length === 0) {
@@ -578,7 +617,7 @@ function updateEndpoints(endpointHits) {
 }
 
 // Update chart type
-function updateChartType() {
+window.updateChartType = function() {
     const newTypeEl = safeGetElement('chart-type');
     if (!newTypeEl) {
         console.error('[updateChartType] chart-type element not found!');
@@ -634,14 +673,14 @@ function showToast(type, message) {
 }
 
 // Modal functions
-function openCreateModal() {
+window.openCreateModal = function() {
     const modal = safeGetElement('create-modal');
     if (modal) {
         modal.classList.remove('hidden');
     }
 }
 
-function closeCreateModal() {
+window.closeCreateModal = function() {
     const modal = safeGetElement('create-modal');
     if (modal) {
         modal.classList.add('hidden');
@@ -654,7 +693,7 @@ function closeCreateModal() {
 }
 
 // Create key function
-async function createKey() {
+window.createKey = async function() {
     const newOwner = safeGetElement('new-owner');
     const newRole = safeGetElement('new-role');
     const newExpiration = safeGetElement('new-expiration');
@@ -694,7 +733,7 @@ async function createKey() {
 }
 
 // Clear logs
-function clearLogs() {
+window.clearLogs = function() {
     const terminal = safeGetElement('terminal');
     if (terminal) {
         terminal.innerHTML = `
@@ -708,7 +747,7 @@ function clearLogs() {
 }
 
 // Export stats
-function exportStats() {
+window.exportStats = function() {
     if (!lastData) {
         showToast('error', 'No data to export');
         return;
@@ -731,7 +770,7 @@ function exportStats() {
 }
 
 // Export keys
-async function exportAllKeys() {
+window.exportAllKeys = async function() {
     try {
         const response = await fetch(`/api/admin/keys?apikey=${adminKey}`);
         const data = await response.json();
@@ -770,7 +809,7 @@ if (adminKeyInput) {
 }
 
 // Toggle key visibility
-function toggleKeyVisibility(fullKey, elementId) {
+window.toggleKeyVisibility = function(fullKey, elementId) {
     const el = document.getElementById(elementId);
     if (!el) return;
     
@@ -782,4 +821,35 @@ function toggleKeyVisibility(fullKey, elementId) {
     } else {
         el.innerText = '••••••••••••••••';
     }
+}
+
+// Update logs
+function updateLogs(logs) {
+    const terminal = document.getElementById('terminal');
+    if (!terminal) return;
+
+    if (!logs || logs.length === 0) {
+        if (terminal.innerHTML.includes('fas fa-terminal')) return;
+        terminal.innerHTML = `
+            <div style="text-align: center; padding: 48px;">
+                <i class="fas fa-terminal" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
+                <p>Aguardando logs do sistema...</p>
+            </div>
+        `;
+        return;
+    }
+
+    const logHtml = logs.map(log => {
+        const typeClass = `log-${log.type.toLowerCase()}`;
+        return `
+            <div class="log-entry">
+                <span class="text-muted">[${log.timestamp}]</span>
+                <span class="${typeClass}" style="font-weight: bold;">[${log.type}]</span>
+                <span>${log.message}</span>
+                ${log.details ? `<div style="margin-left: 20px; font-size: 10px; color: #64748b;">└─> ${log.details}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    terminal.innerHTML = logHtml;
 }

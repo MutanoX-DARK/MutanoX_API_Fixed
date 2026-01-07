@@ -68,7 +68,9 @@ function getStatsOnly() {
         keys: keys,
         endpointHits: systemStats.endpointHits,
         totalRequests: systemStats.totalRequests,
-        uptime: Date.now() - systemStats.startTime
+        startTime: systemStats.startTime,
+        uptime: Date.now() - systemStats.startTime,
+        logs: liveLogs
     };
 }
 
