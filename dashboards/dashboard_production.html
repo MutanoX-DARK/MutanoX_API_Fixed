@@ -108,6 +108,34 @@
         .log-admin { color: #fbbf24; }
         .log-debug { color: #f97316; }
 
+        /* Switch Toggle Style */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #334155;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #10b981; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
         .metric-card {
             position: relative;
             overflow: hidden;
@@ -193,6 +221,34 @@
         .toast-error { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .toast-info { background: linear-gradient(135deg, #6366f1, #4f46e5); }
         .toast-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
 
         @keyframes slideIn {
             from {
@@ -693,25 +749,30 @@
                 </div>
             </div>
         </div>
-
         <!-- Endpoints Tab Content -->
         <div id="content-endpoints" class="mb-6 hidden">
-            <div class="grid grid-cols-1 grid-cols-lg-3 gap-6">
-                <!-- Endpoint List -->
-                <div class="grid-cols-1-2 cyber-card">
-                    <div class="p-5" style="border-bottom: 1px solid #334155;">
-                        <h3 class="text-lg" style="margin: 0; color: #f8fafc;">
-                            <i class="fas fa-network-wired" style="color: #10b981; margin-right: 8px;"></i>
-                            Endpoints Configuration
-                        </h3>
+            <div class="cyber-card mb-6" style="padding: 24px; background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));">
+                <div class="flex flex-wrap justify-between items-center gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-1">Gerenciamento de Endpoints</h2>
+                        <p class="text-muted text-sm">Controle o status e visualize o desempenho de cada serviço da API em tempo real.</p>
                     </div>
-                    <div class="p-5">
-                        <div id="endpoints-management" style="display: flex; flex-direction: column; gap: 12px;">
-                            <div class="flex items-center justify-center" style="padding: 48px;">
-                                <div style="text-align: center;">
-                                    <i class="fas fa-server" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
-                                    <p class="text-muted" style="font-size: 14px; margin: 0;">Loading endpoints...</p>
-                                </div>
+                    <div class="flex gap-3">
+                        <div class="cyber-card" style="padding: 8px 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2);">
+                            <span style="color: #10b981; font-weight: 700;" id="active-endpoints-count">0</span>
+                            <span class="text-xs ml-1" style="color: #94a3b8;">Ativos</span>
+                        </div>
+                        <div class="cyber-card" style="padding: 8px 16px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);">
+                            <span style="color: #ef4444; font-weight: 700;" id="maintenance-endpoints-count">0</span>
+                            <span class="text-xs ml-1" style="color: #94a3b8;">Manutenção</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 grid-cols-md-2 grid-cols-lg-3 gap-6" id="endpoints-management">
+                <!-- Endpoints will be loaded here -->
+            </div>
+
                             </div>
                         </div>
                     </div>

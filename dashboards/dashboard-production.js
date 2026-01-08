@@ -574,6 +574,9 @@ function updateEndpoints(endpointHits, endpointsConfigData = {}) {
 
     if (!container) return;
 
+    let activeCount = 0;
+    let maintenanceCount = 0;
+
     container.innerHTML = endpoints.map(endpoint => {
         const config = endpointConfigs[endpoint];
         const hits = endpointHits[endpoint] || 0;
@@ -581,36 +584,57 @@ function updateEndpoints(endpointHits, endpointsConfigData = {}) {
         const percentage = totalHits > 0 ? ((hits / totalHits) * 100).toFixed(1) : 0;
         const isMaintenance = endpointsConfigData[endpoint] ? endpointsConfigData[endpoint].maintenance : false;
 
+        if (isMaintenance) maintenanceCount++;
+        else activeCount++;
+
         return `
-            <div class="endpoint-item" style="transition: all 0.2s; border: 1px solid ${isMaintenance ? '#ef4444' : 'transparent'}; padding: 16px; border-radius: 16px; background: ${isMaintenance ? 'rgba(239, 68, 68, 0.05)' : 'rgba(30, 41, 59, 0.3)'};">
-                <div class="flex items-center gap-3" style="margin-bottom: 12px;">
-                    <div style="width: 48px; height: 48px; background: ${config.color}1a; border-radius: 16px;">
-                        <i class="fas ${config.icon}" style="font-size: 20px; color: ${config.color}; line-height: 48px;"></i>
-                    </div>
-                    <div style="flex: 1;">
-                        <p class="font-bold" style="font-size: 16px; margin: 0;">${config.name}</p>
-                        <p class="text-muted" style="font-size: 12px;">${config.description}</p>
+            <div class="endpoint-item cyber-card" style="padding: 20px; border: 1px solid ${isMaintenance ? 'rgba(239, 68, 68, 0.3)' : 'rgba(51, 65, 85, 0.3)'}; background: ${isMaintenance ? 'rgba(239, 68, 68, 0.02)' : 'rgba(30, 41, 59, 0.4)'};">
+                <div class="flex items-center justify-between mb-4">
+                    <div style="width: 56px; height: 56px; background: ${config.color}1a; border-radius: 16px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas ${config.icon}" style="font-size: 24px; color: ${config.color};"></i>
                     </div>
                     <div class="text-right">
-                        <p class="font-bold" style="font-family: 'JetBrains Mono', monospace; font-size: 24px; margin: 0; color: #f8fafc;">${hits}</p>
-                        <p class="text-muted" style="font-size: 12px;">requests</p>
+                        <span class="badge" style="background: ${isMaintenance ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; color: ${isMaintenance ? '#ef4444' : '#10b981'}; border: 1px solid ${isMaintenance ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'};">
+                            ${isMaintenance ? 'MANUTENÇÃO' : 'ONLINE'}
+                        </span>
                     </div>
                 </div>
-                <div class="progress-bar" style="margin-bottom: 12px;">
-                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold mb-1" style="color: #f8fafc;">${config.name}</h3>
+                    <p class="text-muted text-xs" style="line-height: 1.4;">${config.description}</p>
                 </div>
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2 text-xs">
-                        <span style="color: #64748b;">${percentage}% do total</span>
-                        ${isMaintenance ? '<span style="color: #ef4444;"><i class="fas fa-tools" style="font-size: 8px; margin-right: 4px;"></i> Manutenção</span>' : '<span style="color: #10b981;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Online</span>'}
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="p-3 rounded-xl" style="background: rgba(15, 23, 42, 0.3);">
+                        <p class="text-xs text-muted mb-1">Total Hits</p>
+                        <p class="text-xl font-bold" style="font-family: 'JetBrains Mono', monospace;">${hits.toLocaleString()}</p>
                     </div>
-                    <button onclick="window.toggleMaintenance('${endpoint}')" class="copy-btn" style="padding: 4px 12px; font-size: 11px; background: ${isMaintenance ? '#10b981' : '#ef4444'}22; color: ${isMaintenance ? '#10b981' : '#ef4444'}; border: 1px solid ${isMaintenance ? '#10b981' : '#ef4444'}44;">
-                        ${isMaintenance ? 'Ativar' : 'Manutenção'}
+                    <div class="p-3 rounded-xl" style="background: rgba(15, 23, 42, 0.3);">
+                        <p class="text-xs text-muted mb-1">Share</p>
+                        <p class="text-xl font-bold" style="font-family: 'JetBrains Mono', monospace;">${percentage}%</p>
+                    </div>
+                </div>
+
+                <div class="progress-bar mb-4" style="height: 6px;">
+                    <div class="progress-fill" style="width: ${percentage}%; background: ${config.color};"></div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="window.toggleMaintenance('${endpoint}')" class="btn-primary" style="flex: 1; padding: 10px; font-size: 12px; background: ${isMaintenance ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'};">
+                        <i class="fas ${isMaintenance ? 'fa-play' : 'fa-pause'} mr-2"></i>
+                        ${isMaintenance ? 'Ativar Serviço' : 'Pausar Serviço'}
                     </button>
                 </div>
             </div>
         `;
     }).join('');
+
+    // Atualizar contadores
+    const activeEl = document.getElementById('active-endpoints-count');
+    const maintenanceEl = document.getElementById('maintenance-endpoints-count');
+    if (activeEl) activeEl.textContent = activeCount;
+    if (maintenanceEl) maintenanceEl.textContent = maintenanceCount;
 
     if (list) {
         list.innerHTML = Object.entries(endpointHits).map(([endpoint, hits]) => {
