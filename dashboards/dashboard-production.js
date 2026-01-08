@@ -504,45 +504,61 @@ function updateKeys(keys) {
 
     container.innerHTML = keysArray.map(([key, info]) => {
         const isActive = info.active !== false;
+        const isExpired = info.expiresAt && new Date() > new Date(info.expiresAt);
+        const isAdminKey = key === 'MutanoX3397';
         
         return `
-            <div class="cyber-card" style="padding: 20px; ${!isActive ? 'opacity: 0.5' : ''}">
-                <div class="flex justify-between items-start" style="margin-bottom: 12px;">
+            <div class="cyber-card" style="padding: 20px; border: 1px solid ${!isActive || isExpired ? 'rgba(239, 68, 68, 0.3)' : 'rgba(51, 65, 85, 0.3)'}; background: ${!isActive || isExpired ? 'rgba(239, 68, 68, 0.02)' : 'rgba(30, 41, 59, 0.4)'};">
+                <div class="flex justify-between items-start" style="margin-bottom: 16px;">
                     <div class="flex items-center gap-3">
-                        <div style="width: 40px; height: 40px; background: ${info.role === 'admin' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; border-radius: 12px;">
-                            <i class="fas ${info.role === 'admin' ? 'fa-shield-alt' : 'fa-key'}" style="font-size: 20px; color: ${info.role === 'admin' ? '#ef4444' : '#10b981'}; line-height: 40px;"></i>
+                        <div style="width: 44px; height: 44px; background: ${info.role === 'admin' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas ${info.role === 'admin' ? 'fa-shield-alt' : 'fa-key'}" style="font-size: 18px; color: ${info.role === 'admin' ? '#ef4444' : '#10b981'};"></i>
                         </div>
                         <div>
-                            <p class="font-bold" style="font-size: 16px; margin: 0;">${info.owner}</p>
-                            <div class="flex items-center gap-2" style="margin-top: 2px;">
-                                <span class="badge badge-${info.role}">${info.role}</span>
-                                <span class="badge badge-active">ATIVO</span>
+                            <p class="font-bold" style="font-size: 16px; margin: 0; color: #f8fafc;">${info.owner}</p>
+                            <div class="flex items-center gap-2" style="margin-top: 4px;">
+                                <span class="badge" style="background: ${info.role === 'admin' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)'}; color: ${info.role === 'admin' ? '#ef4444' : '#6366f1'};">${info.role.toUpperCase()}</span>
+                                <span class="badge" style="background: ${!isActive || isExpired ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; color: ${!isActive || isExpired ? '#ef4444' : '#10b981'};">
+                                    ${isExpired ? 'EXPIRADA' : (isActive ? 'ATIVA' : 'INATIVA')}
+                                </span>
                             </div>
                         </div>
                     </div>
+                    ${!isAdminKey ? `
+                    <div class="flex gap-2">
+                        <button onclick="window.toggleKeyStatus('${key}')" class="copy-btn" style="padding: 6px 10px; background: ${isActive ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)'}; color: ${isActive ? '#f59e0b' : '#10b981'};" title="${isActive ? 'Desativar' : 'Ativar'}">
+                            <i class="fas ${isActive ? 'fa-pause' : 'fa-play'}"></i>
+                        </button>
+                        <button onclick="window.deleteKey('${key}')" class="copy-btn" style="padding: 6px 10px; background: rgba(239, 68, 68, 0.1); color: #ef4444;" title="Excluir">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    ` : ''}
                 </div>
                 
-                <div style="margin-bottom: 12px;">
-                    <div class="cyber-card" style="padding: 12px; background: rgba(15, 23, 42, 0.3); display: flex; justify-content: space-between; align-items: center;">
-                        <code class="text-success" style="font-size: 12px;" id="key-${key.substring(0, 8)}">••••••••••••••••</code>
+                <div style="margin-bottom: 16px;">
+                    <div class="cyber-card" style="padding: 12px; background: rgba(15, 23, 42, 0.3); display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(51, 65, 85, 0.2);">
+                        <code class="text-success" style="font-size: 12px; font-family: 'JetBrains Mono', monospace;" id="key-${key.substring(0, 8)}">••••••••••••••••</code>
                         <button onclick="window.toggleKeyVisibility('${key}', 'key-${key.substring(0, 8)}')" class="copy-btn" style="padding: 4px 8px; font-size: 10px;">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
                 </div>
                 
-                <div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">
-                    <div>
-                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Usage</p>
-                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 18px; margin: 0;">${info.usageCount || 0}</p>
+                <div class="grid grid-cols-2 gap-4" style="font-size: 13px;">
+                    <div class="p-3 rounded-xl" style="background: rgba(15, 23, 42, 0.3);">
+                        <p class="text-xs text-muted mb-1">Uso Total</p>
+                        <p class="font-bold" style="font-family: 'JetBrains Mono', monospace; font-size: 16px; margin: 0;">${info.usageCount || 0}</p>
                     </div>
-                    <div>
-                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Last Used</p>
-                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">${info.lastUsed ? new Date(info.lastUsed).toLocaleString('pt-BR') : 'Never'}</p>
+                    <div class="p-3 rounded-xl" style="background: rgba(15, 23, 42, 0.3);">
+                        <p class="text-xs text-muted mb-1">Duração</p>
+                        <p class="font-bold" style="font-family: 'JetBrains Mono', monospace; font-size: 14px; margin: 0;">${info.duration ? (info.duration === '1w' ? '1 Semana' : '1 Mês') : 'Ilimitada'}</p>
                     </div>
-                    <div style="grid-column: span 2;">
-                        <p class="text-xs" style="color: #64748b; margin-bottom: 4px;">Created</p>
-                        <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">${new Date(info.createdAt).toLocaleString('pt-BR')}</p>
+                    <div class="col-span-2 p-3 rounded-xl" style="background: rgba(15, 23, 42, 0.3);">
+                        <p class="text-xs text-muted mb-1">Expiração</p>
+                        <p class="font-bold" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; margin: 0; color: ${isExpired ? '#ef4444' : '#94a3b8'};">
+                            ${info.expiresAt ? new Date(info.expiresAt).toLocaleString('pt-BR') : (info.duration ? 'Ativa no 1º uso' : 'Nunca')}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -865,6 +881,36 @@ window.toggleMaintenance = async function(endpoint) {
         }
     } catch (error) {
         showToast('error', 'Erro ao alterar manutenção: ' + error.message);
+    }
+}
+
+// Toggle key status (Active/Inactive)
+window.toggleKeyStatus = async function(key) {
+    try {
+        const response = await fetch(`/api/admin/toggle?target=${key}&apikey=${adminKey}`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            showToast('success', `Chave ${data.active ? 'ativada' : 'desativada'} com sucesso`);
+            refreshData();
+        }
+    } catch (error) {
+        showToast('error', 'Erro ao alterar status: ' + error.message);
+    }
+}
+
+// Delete API Key
+window.deleteKey = async function(key) {
+    if (!confirm('Tem certeza que deseja excluir esta API Key permanentemente?')) return;
+    
+    try {
+        const response = await fetch(`/api/admin/keys?target=${key}&apikey=${adminKey}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            showToast('success', 'API Key excluída com sucesso');
+            refreshData();
+        }
+    } catch (error) {
+        showToast('error', 'Erro ao excluir chave: ' + error.message);
     }
 }
 
