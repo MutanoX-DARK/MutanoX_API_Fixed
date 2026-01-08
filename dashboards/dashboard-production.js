@@ -305,15 +305,25 @@ function startAutoRefresh() {
 }
 
 // Toggle auto refresh
-const autoRefreshToggle = safeGetElement('auto-refresh-toggle');
+window.toggleAutoRefresh = function() {
+    const toggle = document.getElementById('auto-refresh-toggle');
+    if (!toggle) return;
+    
+    if (toggle.checked) {
+        console.log('[AutoRefresh] Enabled');
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(refreshData, refreshRate);
+    } else {
+        console.log('[AutoRefresh] Disabled');
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+// Inicializar listener se o elemento existir
+const autoRefreshToggle = document.getElementById('auto-refresh-toggle');
 if (autoRefreshToggle) {
-    autoRefreshToggle.addEventListener('change', function() {
-        if (this.checked) {
-            refreshInterval = setInterval(refreshData, refreshRate);
-        } else {
-            clearInterval(refreshInterval);
-        }
-    });
+    autoRefreshToggle.addEventListener('change', window.toggleAutoRefresh);
 }
 
 // Force refresh
@@ -345,6 +355,13 @@ async function refreshData() {
             throw new Error('Invalid response');
         }
 
+        // Buscar configurações de manutenção
+        const endpointsRes = await fetch(`/api/admin/endpoints?apikey=${adminKey}`);
+        const endpointsData = await endpointsRes.json();
+        if (endpointsData.success) {
+            data.endpointsConfig = endpointsData.config;
+        }
+
         // Check if data changed
         const newData = JSON.stringify(data);
         if (lastData === newData) {
@@ -358,7 +375,7 @@ async function refreshData() {
         
         // Sempre atualizar dados essenciais
         updateKeys(data.keys);
-        updateEndpoints(data.endpointHits);
+        updateEndpoints(data.endpointHits, data.endpointsConfig);
         
         // Se houver logs na resposta, atualizar (precisamos garantir que a API envie logs)
         if (data.logs) {
@@ -534,7 +551,7 @@ function updateKeys(keys) {
 }
 
 // Update endpoints
-function updateEndpoints(endpointHits) {
+function updateEndpoints(endpointHits, endpointsConfigData = {}) {
     console.log('[updateEndpoints] Updating endpoints...', endpointHits);
     
     const container = document.getElementById('endpoints-management');
@@ -543,44 +560,29 @@ function updateEndpoints(endpointHits) {
 
     // Atualizar Gráfico de Pizza
     if (endpointChart) {
-        const labels = Object.keys(endpointHits).map(key => endpointConfigs[key] ? endpointConfigs[key].name : key);
-        const data = Object.values(endpointHits);
+        const labels = Object.keys(endpointHits).length > 0 
+            ? Object.keys(endpointHits).map(key => endpointConfigs[key] ? endpointConfigs[key].name : key)
+            : ['Nenhum dado'];
+        const data = Object.keys(endpointHits).length > 0 
+            ? Object.values(endpointHits)
+            : [1];
         
         endpointChart.data.labels = labels;
         endpointChart.data.datasets[0].data = data;
         endpointChart.update();
     }
 
-    if (!container) {
-        console.warn('[updateEndpoints] endpoints-management element not found!');
-    }
-
-    if (Object.keys(endpointHits).length === 0) {
-        safeSetInnerHTML('endpoints-management', `
-            <div class="flex items-center justify-center" style="padding: 48px;">
-                <i class="fas fa-network-wired" style="font-size: 48px; color: #64748b; margin-bottom: 16px;"></i>
-                <p class="text-muted" style="font-size: 14px; margin: 0;">Nenhum endpoint utilizado ainda</p>
-            </div>
-        `);
-        if (list) {
-            safeSetInnerHTML('endpoint-list', `
-                <div class="flex items-center justify-center" style="height: 300px;">
-                    <p class="text-muted" style="font-size: 14px;">Aguardando dados de endpoints...</p>
-                </div>
-            `);
-        }
-        return;
-    }
+    if (!container) return;
 
     container.innerHTML = endpoints.map(endpoint => {
         const config = endpointConfigs[endpoint];
         const hits = endpointHits[endpoint] || 0;
         const totalHits = Object.values(endpointHits).reduce((sum, val) => sum + val, 0);
         const percentage = totalHits > 0 ? ((hits / totalHits) * 100).toFixed(1) : 0;
-        const isActive = hits > 0;
+        const isMaintenance = endpointsConfigData[endpoint] ? endpointsConfigData[endpoint].maintenance : false;
 
         return `
-            <div class="endpoint-item" style="transition: all 0.2s; border: 1px solid transparent; padding: 16px; border-radius: 16px; ${!isActive ? 'opacity: 0.5; background: rgba(0, 0, 0, 0.2);' : ''}">
+            <div class="endpoint-item" style="transition: all 0.2s; border: 1px solid ${isMaintenance ? '#ef4444' : 'transparent'}; padding: 16px; border-radius: 16px; background: ${isMaintenance ? 'rgba(239, 68, 68, 0.05)' : 'rgba(30, 41, 59, 0.3)'};">
                 <div class="flex items-center gap-3" style="margin-bottom: 12px;">
                     <div style="width: 48px; height: 48px; background: ${config.color}1a; border-radius: 16px;">
                         <i class="fas ${config.icon}" style="font-size: 20px; color: ${config.color}; line-height: 48px;"></i>
@@ -594,12 +596,17 @@ function updateEndpoints(endpointHits) {
                         <p class="text-muted" style="font-size: 12px;">requests</p>
                     </div>
                 </div>
-                <div class="progress-bar" style="margin-bottom: 8px;">
+                <div class="progress-bar" style="margin-bottom: 12px;">
                     <div class="progress-fill" style="width: ${percentage}%"></div>
                 </div>
-                <div class="flex items-center gap-2 text-xs" style="margin-bottom: 0;">
-                    <span style="color: #64748b;">${percentage}% do total</span>
-                    ${isActive ? '<span style="color: #10b981;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Ativo</span>' : '<span style="color: #64748b;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Inativo</span>'}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-xs">
+                        <span style="color: #64748b;">${percentage}% do total</span>
+                        ${isMaintenance ? '<span style="color: #ef4444;"><i class="fas fa-tools" style="font-size: 8px; margin-right: 4px;"></i> Manutenção</span>' : '<span style="color: #10b981;"><i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Online</span>'}
+                    </div>
+                    <button onclick="window.toggleMaintenance('${endpoint}')" class="copy-btn" style="padding: 4px 12px; font-size: 11px; background: ${isMaintenance ? '#10b981' : '#ef4444'}22; color: ${isMaintenance ? '#10b981' : '#ef4444'}; border: 1px solid ${isMaintenance ? '#10b981' : '#ef4444'}44;">
+                        ${isMaintenance ? 'Ativar' : 'Manutenção'}
+                    </button>
                 </div>
             </div>
         `;
@@ -711,39 +718,39 @@ window.closeCreateModal = function() {
 window.createKey = async function() {
     const newOwner = safeGetElement('new-owner');
     const newRole = safeGetElement('new-role');
-    const newExpiration = safeGetElement('new-expiration');
-    const newDescription = safeGetElement('new-description');
-    
-    if (!newOwner) {
-        showToast('error', 'Please enter an owner name');
+    const newDuration = safeGetElement('new-duration');
+    const bulkCount = safeGetElement('bulk-count');
+
+    if (!newOwner || !newOwner.value) {
+        showToast('error', 'Por favor, insira o nome do dono');
         return;
     }
 
     const owner = newOwner.value;
     const role = newRole ? newRole.value : 'user';
-    const expiration = newExpiration ? newExpiration.value : '';
-    const description = newDescription ? newDescription.value : '';
+    const duration = newDuration ? newDuration.value : '';
+    const count = bulkCount ? parseInt(bulkCount.value) : 1;
 
-    console.log('[createKey] Creating key for owner:', owner, 'role:', role);
-    
     try {
-        const response = await fetch(`/api/admin/keys?owner=${encodeURIComponent(owner)}&role=${role}&apikey=${adminKey}`, {
-            method: 'POST'
-        });
-        const data = await response.json();
+        let url = '';
+        if (count > 1) {
+            url = `/api/admin/keys/bulk?owner=${encodeURIComponent(owner)}&count=${count}&duration=${duration}&apikey=${adminKey}`;
+        } else {
+            url = `/api/admin/keys?owner=${encodeURIComponent(owner)}&role=${role}&duration=${duration}&apikey=${adminKey}`;
+        }
 
+        const response = await fetch(url, { method: 'POST' });
+        const data = await response.json();
+        
         if (data.success) {
-            console.log('[createKey] Key generated successfully:', data.key);
-            showToast('success', `API Key Generated: ${data.key.substring(0, 10)}...`);
+            showToast('success', count > 1 ? `${count} chaves criadas com sucesso` : 'API Key criada com sucesso');
             closeCreateModal();
             refreshData();
         } else {
-            console.error('[createKey] Failed to generate key:', data.error);
-            showToast('error', 'Falha ao gerar key: ' + data.error);
+            showToast('error', 'Erro: ' + data.error);
         }
     } catch (error) {
-        console.error('[createKey] Error:', error);
-        showToast('error', 'Error: ' + error.message);
+        showToast('error', 'Erro de conexão: ' + error.message);
     }
 }
 
@@ -821,6 +828,20 @@ if (adminKeyInput) {
             login();
         }
     });
+}
+
+// Toggle maintenance mode
+window.toggleMaintenance = async function(endpoint) {
+    try {
+        const response = await fetch(`/api/admin/endpoints/toggle?target=${endpoint}&apikey=${adminKey}`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+            showToast('success', `Endpoint ${endpoint} ${data.maintenance ? 'em manutenção' : 'ativado'}`);
+            refreshData();
+        }
+    } catch (error) {
+        showToast('error', 'Erro ao alterar manutenção: ' + error.message);
+    }
 }
 
 // Toggle key visibility

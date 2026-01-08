@@ -19,8 +19,23 @@ const { URL, URLSearchParams } = require('url');
 const PORT = 8080;
 const API_KEYS_FILE = path.join(__dirname, 'api_keys.json');
 const STATS_FILE = path.join(__dirname, 'api_stats.json');
+const ENDPOINTS_FILE = path.join(__dirname, 'endpoints_config.json');
 const ADMIN_KEY = 'MutanoX3397';
 const DASHBOARD_PATH = path.join(__dirname, 'dashboards', 'dashboard_production.html');
+
+// Configuração de Endpoints (Manutenção)
+let endpointsConfig = {};
+function loadEndpointsConfig() {
+    if (fs.existsSync(ENDPOINTS_FILE)) {
+        endpointsConfig = JSON.parse(fs.readFileSync(ENDPOINTS_FILE, 'utf8'));
+    } else {
+        const defaultEndpoints = ['cpf', 'nome', 'numero', 'bypass', 'bypasscf', 'infoff', 'downloader', 'github', 'gimage', 'pinterest', 'roblox', 'tiktok', 'yt', 'video', 'nsfw'];
+        defaultEndpoints.forEach(e => { endpointsConfig[e] = { maintenance: false }; });
+        saveEndpointsConfig();
+    }
+}
+function saveEndpointsConfig() { fs.writeFileSync(ENDPOINTS_FILE, JSON.stringify(endpointsConfig, null, 2)); }
+loadEndpointsConfig();
 
 // Telemetria e Logs REAIS
 let liveLogs = [];
@@ -122,17 +137,37 @@ function saveApiKeys(keys) { fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys
 function validateAndTrackKey(key, skipIncrement = false) {
     const keys = loadApiKeys();
     const keyData = keys[key];
-    if (keyData && (keyData.active === undefined || keyData.active === true)) {
-        if (!skipIncrement) {
-            keyData.usageCount = (keyData.usageCount || 0) + 1;
-            keyData.lastUsed = new Date().toISOString();
+    
+    if (!keyData) return { valid: false };
+    if (keyData.active === false) return { valid: false, error: 'Key inactive' };
+
+    // Verificar validade temporal
+    if (keyData.expiresAt) {
+        if (new Date() > new Date(keyData.expiresAt)) {
+            keyData.active = false;
             saveApiKeys(keys);
-            systemStats.totalRequests++;
-            saveStats(); // Salvar estatísticas sempre que incrementar
+            return { valid: false, error: 'Key expired' };
         }
-        return { valid: true, isAdmin: keyData.role === 'admin', owner: keyData.owner };
     }
-    return { valid: false };
+
+    if (!skipIncrement) {
+        // Ativação no primeiro uso
+        if (keyData.duration && !keyData.expiresAt) {
+            const now = new Date();
+            if (keyData.duration === '1w') now.setDate(now.getDate() + 7);
+            else if (keyData.duration === '1m') now.setMonth(now.getMonth() + 1);
+            keyData.expiresAt = now.toISOString();
+            log('AUTH', `Chave ativada: ${key}`, `Expira em: ${keyData.expiresAt}`);
+        }
+
+        keyData.usageCount = (keyData.usageCount || 0) + 1;
+        keyData.lastUsed = new Date().toISOString();
+        saveApiKeys(keys);
+        systemStats.totalRequests++;
+        saveStats();
+    }
+    
+    return { valid: true, isAdmin: keyData.role === 'admin', owner: keyData.owner };
 }
 
 // ==========================================
@@ -901,6 +936,28 @@ const server = http.createServer(async (req, res) => {
           saveApiKeys(keys);
           log('ADMIN', `Chave removida: ${target}`);
           res.writeHead(200); res.end(JSON.stringify({ success: true, message: 'Key deleted' }));
+      } else if (path === '/api/admin/endpoints' && req.method === 'GET') {
+          res.writeHead(200); res.end(JSON.stringify({ success: true, config: endpointsConfig }));
+      } else if (path === '/api/admin/endpoints/toggle' && req.method === 'POST') {
+          const target = query.target;
+          if (!target || !endpointsConfig[target]) { res.writeHead(404); res.end(JSON.stringify({ success: false, error: 'Endpoint not found' })); return; }
+          endpointsConfig[target].maintenance = !endpointsConfig[target].maintenance;
+          saveEndpointsConfig();
+          log('ADMIN', `Manutenção alterada: ${target}`, `Status: ${endpointsConfig[target].maintenance ? 'ON' : 'OFF'}`);
+          res.writeHead(200); res.end(JSON.stringify({ success: true, endpoint: target, maintenance: endpointsConfig[target].maintenance }));
+      } else if (path === '/api/admin/keys/bulk' && req.method === 'POST') {
+          const count = parseInt(query.count) || 1;
+          const owner = query.owner || 'Bulk User';
+          const duration = query.duration || null;
+          const newKeys = [];
+          for (let i = 0; i < count; i++) {
+              const newKey = `MutanoX-${generateUid(16)}`;
+              keys[newKey] = { owner: `${owner} ${i+1}`, role: 'user', active: true, usageCount: 0, lastUsed: null, createdAt: new Date().toISOString(), duration };
+              newKeys.push(newKey);
+          }
+          saveApiKeys(keys);
+          log('ADMIN', `Criação em lote: ${count} chaves`, `Dono: ${owner}`);
+          res.writeHead(201); res.end(JSON.stringify({ success: true, keys: newKeys }));
       }
       return;
   }
@@ -930,7 +987,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      systemStats.endpointHits[tipo.toLowerCase()] = (systemStats.endpointHits[tipo.toLowerCase()] || 0) + 1;
+      // Verificar Manutenção
+      const endpointKey = tipo.toLowerCase();
+      if (endpointsConfig[endpointKey] && endpointsConfig[endpointKey].maintenance) {
+          log('WARN', `Tentativa de acesso a endpoint em manutenção: ${endpointKey}`);
+          res.writeHead(503);
+          res.end(JSON.stringify({ sucesso: false, erro: 'Este endpoint está em manutenção temporária' }));
+          return;
+      }
+
+      systemStats.endpointHits[endpointKey] = (systemStats.endpointHits[endpointKey] || 0) + 1;
       saveStats(); // Salvar endpointHits persistentemente
       let result;
 

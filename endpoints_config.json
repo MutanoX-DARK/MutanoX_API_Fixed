@@ -1,0 +1,47 @@
+{
+  "cpf": {
+    "maintenance": false
+  },
+  "nome": {
+    "maintenance": false
+  },
+  "numero": {
+    "maintenance": false
+  },
+  "bypass": {
+    "maintenance": false
+  },
+  "bypasscf": {
+    "maintenance": false
+  },
+  "infoff": {
+    "maintenance": false
+  },
+  "downloader": {
+    "maintenance": false
+  },
+  "github": {
+    "maintenance": false
+  },
+  "gimage": {
+    "maintenance": false
+  },
+  "pinterest": {
+    "maintenance": false
+  },
+  "roblox": {
+    "maintenance": false
+  },
+  "tiktok": {
+    "maintenance": false
+  },
+  "yt": {
+    "maintenance": false
+  },
+  "video": {
+    "maintenance": false
+  },
+  "nsfw": {
+    "maintenance": false
+  }
+}
